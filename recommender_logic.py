@@ -337,71 +337,71 @@ def recommend_books(user_movie_titles, netflix_df, books_df, netflix_vectors, bo
         print(f"  Leírás: {res['Leírás']}")
     
     print("-" * 30)
-    return results
+    return results, recommendation_title
 
-def main_cli():
-    download_nltk_data()
+# def main_cli():
+#     download_nltk_data()
 
-    cache_dir = ".cache"
-    os.makedirs(cache_dir, exist_ok=True)
+#     cache_dir = ".cache"
+#     os.makedirs(cache_dir, exist_ok=True)
 
-    #Adatok betöltése
-    try:
-        netflix_data, book_data = load_datasets() 
-    except FileNotFoundError as e:
-        print(f"Hiba az adathalmazok betöltésekor: {e}")
-        return
+#     #Adatok betöltése
+#     try:
+#         netflix_data, book_data = load_datasets() 
+#     except FileNotFoundError as e:
+#         print(f"Hiba az adathalmazok betöltésekor: {e}")
+#         return
         
-    #Modellek felépítése (TF-IDF)
+#     #Modellek felépítése (TF-IDF)
     
-    n_vec_path = os.path.join(cache_dir, 'netflix_vectors.npy')
-    b_vec_path = os.path.join(cache_dir, 'books_vectors.npy')
-    n_df_path = os.path.join(cache_dir, 'netflix_df.parquet')
-    b_df_path = os.path.join(cache_dir, 'books_df.parquet')
+#     n_vec_path = os.path.join(cache_dir, 'netflix_vectors.npy')
+#     b_vec_path = os.path.join(cache_dir, 'books_vectors.npy')
+#     n_df_path = os.path.join(cache_dir, 'netflix_df.parquet')
+#     b_df_path = os.path.join(cache_dir, 'books_df.parquet')
 
-    #Ellenőrizzük, hogy a gyorsítótár létezik-e
-    if (os.path.exists(n_vec_path) and os.path.exists(b_vec_path) and
-        os.path.exists(n_df_path) and os.path.exists(b_df_path)):
+#     #Ellenőrizzük, hogy a gyorsítótár létezik-e
+#     if (os.path.exists(n_vec_path) and os.path.exists(b_vec_path) and
+#         os.path.exists(n_df_path) and os.path.exists(b_df_path)):
 
-        print("Elő-számított modellek (cache) betöltése...")
-        n_vectors = np.load(n_vec_path)
-        b_vectors = np.load(b_vec_path)
-        n_df = pd.read_parquet(n_df_path)
-        b_df = pd.read_parquet(b_df_path)
-        print("Modellek betöltve a gyorsítótárból.")
+#         print("Elő-számított modellek (cache) betöltése...")
+#         n_vectors = np.load(n_vec_path)
+#         b_vectors = np.load(b_vec_path)
+#         n_df = pd.read_parquet(n_df_path)
+#         b_df = pd.read_parquet(b_df_path)
+#         print("Modellek betöltve a gyorsítótárból.")
 
-    else:
-        print("Gyorsítótár nem található, modellek felépítése nulláról...")
-        #Adatok betöltése
-        try:
-            netflix_data, book_data = load_datasets() 
-            if netflix_data is None or book_data is None:
-                print("Az adatok betöltése nem sikerült, a program leáll.")
-                return
-        except Exception as e:
-            print(f"Hiba az adathalmazok betöltésekor: {e}")
-            return
+#     else:
+#         print("Gyorsítótár nem található, modellek felépítése nulláról...")
+#         #Adatok betöltése
+#         try:
+#             netflix_data, book_data = load_datasets() 
+#             if netflix_data is None or book_data is None:
+#                 print("Az adatok betöltése nem sikerült, a program leáll.")
+#                 return
+#         except Exception as e:
+#             print(f"Hiba az adathalmazok betöltésekor: {e}")
+#             return
 
-        #Modellek felépítése
-        n_vectors, b_vectors, n_df, b_df = build_recommendation_models(netflix_data, book_data)
+#         #Modellek felépítése
+#         n_vectors, b_vectors, n_df, b_df = build_recommendation_models(netflix_data, book_data)
     
-    while True:
-        user_input = input("\nAdja meg a filmcímeket vesszővel elválasztva (pl. Stranger Things, Breaking Bad): ").strip()
+#     while True:
+#         user_input = input("\nAdja meg a filmcímeket vesszővel elválasztva (pl. Stranger Things, Breaking Bad): ").strip()
         
-        movie_titles = [title.strip() for title in user_input.split(',') if title.strip()]
+#         movie_titles = [title.strip() for title in user_input.split(',') if title.strip()]
         
-        if not movie_titles:
-            print("Kérem, adjon meg legalább egy filmcímet.")
-            continue
+#         if not movie_titles:
+#             print("Kérem, adjon meg legalább egy filmcímet.")
+#             continue
 
-        recommend_books(
-            movie_titles,
-            n_df,
-            b_df,
-            n_vectors,
-            b_vectors,
-            top_n=5
-        )
+#         recommend_books(
+#             movie_titles,
+#             n_df,
+#             b_df,
+#             n_vectors,
+#             b_vectors,
+#             top_n=5
+#         )
 
-if __name__ == "__main__":
-    main_cli()
+# if __name__ == "__main__":
+#     main_cli()
