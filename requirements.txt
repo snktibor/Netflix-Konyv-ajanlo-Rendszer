@@ -5,4 +5,5 @@ tqdm
 thefuzz
 streamlit
 pyarrow
+nltk
 sentence-transformers
