@@ -1,9 +1,8 @@
 pandas
 numpy
-nltk
 scikit-learn
 tqdm
-spacy
 thefuzz
 streamlit
 pyarrow
+sentence-transformers
