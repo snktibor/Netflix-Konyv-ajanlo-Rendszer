@@ -2,94 +2,20 @@ import os
 import re
 import pandas as pd
 import numpy as np
-import nltk
 from nltk.corpus import stopwords
 from sklearn.metrics.pairwise import cosine_similarity
 import time
 import ast
 from tqdm import tqdm
-import zipfile
-import urllib.request
-import spacy
 from thefuzz import process
+from sentence_transformers import SentenceTransformer
+from sklearn.preprocessing import normalize
 
-# NLTK adatok letöltése (stopwords, tokenizer)
-def download_nltk_data():
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        print("NLTK 'stopwords' letöltése...")
-        nltk.download('stopwords')
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        print("NLTK 'punkt' letöltése...")
-        nltk.download('punkt')
-
-stop_words = None
-spacy_nlp = None
-
-def get_document_vector(tokens, embeddings_dict, dim=100):
-    vectors = []
-    for token in tokens:
-        if token in embeddings_dict:
-            vectors.append(embeddings_dict[token])
-    
-    if not vectors:
-        return np.zeros(dim)
-    
-    return np.array(vectors).mean(axis=0)
-
-#A 'dim' lehet 50, 100, 200, 300.
-def load_glove_model(dim=100):
-    glove_zip_url = "https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip"
-    glove_zip_path = ".glove/glove.6B.zip"
-    glove_dir = ".glove/glove.6B"
-    modelfile_name = f"glove.6B.{dim}d.txt"
-    modelfile_path = os.path.join(glove_dir, modelfile_name)
-    
-    #400k sor van
-    total_lines = 400000 
-
-    #Letöltés (ha a ZIP hiányzik)
-    if not os.path.exists(glove_zip_path) and not os.path.exists(modelfile_path):
-        print(f"GloVe modell letöltése ({glove_zip_url})...")
-        # tqdm progress bar a letöltéshez
-        with tqdm(unit='B', unit_scale=True, miniters=1, desc=glove_zip_url.split('/')[-1]) as t:
-            urllib.request.urlretrieve(glove_zip_url, glove_zip_path, 
-                                       reporthook=lambda b, bsize, tsize: t.update(bsize))
-    
-    #Kicsomagolás (ha a TXT fájl hiányzik, de a ZIP megvan)
-    if not os.path.exists(modelfile_path):
-        print(f"GloVe modell kicsomagolása ({glove_zip_path})...")
-        with zipfile.ZipFile(glove_zip_path, 'r') as zip_ref:
-            print(f"'{modelfile_name}' kicsomagolása...")
-            zip_ref.extract(modelfile_name, path=glove_dir)
-            print("Kicsomagolás kész.")
-            
-    #Betöltés
-    print(f"Szóbeágyazás-modell betöltése: {modelfile_path}")
-    print("Ez eltarthat 1-2 percig...")
-    
-    embeddings = {}
-    with open(modelfile_path, "r", encoding="utf-8") as f:
-        for line in tqdm(f, total=total_lines, desc="Modell betöltése"):
-            parts = line.split()
-            word = parts[0]
-            try:
-                vector = np.array(parts[1:]).astype('float')
-                embeddings[word] = vector
-            except ValueError:
-                #hibás sor, átugorjuk
-                pass
-                
-    print(f"Modell betöltve, {len(embeddings)} szóvektorral.")
-    return embeddings, dim
 
 def load_datasets():
     print("Adathalmazok betöltése a helyi mappákból...")
 
-    netflix_full_path = os.path.join('datasets', 'Netflix_movies_and_tv_shows.csv')
+    netflix_full_path = os.path.join('datasets', 'netflix_titles.csv')
     books_full_path = os.path.join('datasets', 'goodreads_data.csv')
 
     try:
@@ -108,32 +34,6 @@ def load_datasets():
     print("Adathalmazok sikeresen betöltve.")
     return netflix_df, books_df
 
-
-def preprocess_text(text):
-    global stop_words, spacy_nlp
-    
-    #NLTK stop_words betöltése (ha még nem történt meg)
-    if stop_words is None:
-        download_nltk_data()
-        stop_words = set(stopwords.words('english'))
-        
-    #SpaCy modell betöltése (ha még nem történt meg)
-    if spacy_nlp is None:
-        print("SpaCy 'en_core_web_sm' modell betöltése (csak egyszer)...")
-        spacy_nlp = spacy.load('en_core_web_sm', disable=["parser", "ner", "lemmatizer"])
-        print("Modell betöltve.")
-
-    if not isinstance(text, str):
-        return []
-
-    doc = spacy_nlp(text)
-    processed_tokens = [
-        token.text.lower() #Kisbetűsítés
-        for token in doc
-        if token.is_alpha and #Csak betűk
-            token.text.lower() not in stop_words #Stop-szavak szűrése
-    ]
-    return processed_tokens
 
 
 def parse_netflix_genres(genres_str):
@@ -170,6 +70,11 @@ def parse_netflix_genres(genres_str):
             
     return genres_set
 
+def join_genres_for_encoding(genre_set):
+    if not genre_set:
+        return ""
+    return " ".join(sorted(list(genre_set)))
+
 def safe_genre_parse(genres_str):
     if not genres_str or not isinstance(genres_str, str):
         return set()
@@ -192,48 +97,78 @@ def build_recommendation_models(netflix_df, books_df):
     print("\nSzöveges adatok előfeldolgozása...")
     start_time = time.time()
     
-    #Hiányzó adatok kezelése
+    # Hiányzó adatok kezelése
     netflix_df['description'] = netflix_df['description'].fillna('')
     netflix_df['listed_in'] = netflix_df['listed_in'].fillna('')
     books_df['Description'] = books_df['Description'].fillna('')
     books_df['Genres'] = books_df['Genres'].fillna("[]")
     
-    #Műfaj modellezés
+    # Műfaj modellezés
     netflix_df['genres_list'] = netflix_df['listed_in'].apply(parse_netflix_genres)
     books_df['genres_list'] = books_df['Genres'].apply(safe_genre_parse)
 
-    tqdm.pandas(desc="Szövegfeldolgozás")
-    #Tartalom modellezés
-    netflix_df['cleaned_tokens'] = netflix_df['description'].progress_apply(preprocess_text)
-    books_df['cleaned_tokens'] = books_df['Description'].progress_apply(preprocess_text)
+    print(f"Műfajok feldolgozva. Időtartam: {time.time() - start_time:.2f} mp.")
     
-    print(f"Szöveg előfeldolgozás kész. Időtartam: {time.time() - start_time:.2f} mp.")
-    
-    #Modellépítés
-    print("Szóbeágyazás modell építése...")
+    # MODELLÉPÍTÉS (Súlyozott)
+    print("Sentence-Transformer modell építése...")
     start_time = time.time()
     
-    #GloVe modell betöltése
-    embeddings_dict, EMBEDDING_DIM = load_glove_model(dim=300) 
-    
-    #Dokumentum vektorok kiszámítása
-    print("Netflix leírások vektorizálása...")
-    netflix_vectors_list = [get_document_vector(tokens, embeddings_dict, EMBEDDING_DIM) 
-                            for tokens in tqdm(netflix_df['cleaned_tokens'], desc="Netflix")]
-    
-    print("Könyv leírások vektorizálása...")
-    books_vectors_list = [get_document_vector(tokens, embeddings_dict, EMBEDDING_DIM) 
-                          for tokens in tqdm(books_df['cleaned_tokens'], desc="Könyvek")]
+    model = SentenceTransformer('all-MiniLM-L6-v2') 
 
-    #Átalakítás NumPy mátrixszá
-    netflix_doc_vectors = np.array(netflix_vectors_list)
-    books_doc_vectors = np.array(books_vectors_list)
+    # Leírás vektorok
+    print("Netflix leírások kódolása...")
+    netflix_desc_vectors = model.encode(
+        netflix_df['description'].tolist(), 
+        show_progress_bar=True
+    )
+    print("Könyv leírások kódolása...")
+    books_desc_vectors = model.encode(
+        books_df['Description'].tolist(), 
+        show_progress_bar=True
+    )
+
+    # Műfaj vektorok
+    print("Netflix műfajok kódolása...")
+    netflix_df['genre_text'] = netflix_df['genres_list'].apply(join_genres_for_encoding)
+    netflix_genre_vectors = model.encode(
+        netflix_df['genre_text'].tolist(), 
+        show_progress_bar=True
+    )
     
-    print(f"Ajánlórendszer felépítve (GloVe alapján). Időtartam: {time.time() - start_time:.2f} mp.")
+    print("Könyv műfajok kódolása...")
+    books_df['genre_text'] = books_df['genres_list'].apply(join_genres_for_encoding)
+    books_genre_vectors = model.encode(
+        books_df['genre_text'].tolist(), 
+        show_progress_bar=True
+    )
+
+    # Súlyozott átlagolás
+    print("Vektorok súlyozása (70% leírás, 30% műfaj)...")
     
+    DESC_WEIGHT = 0.7 
+    GENRE_WEIGHT = 0.3
+
+    # szuper-vektort
+    netflix_doc_vectors = (netflix_desc_vectors * DESC_WEIGHT) + (netflix_genre_vectors * GENRE_WEIGHT)
+    books_doc_vectors = (books_desc_vectors * DESC_WEIGHT) + (books_genre_vectors * GENRE_WEIGHT)
+
+    # Normalizálás
+    netflix_doc_vectors = normalize(netflix_doc_vectors)
+    books_doc_vectors = normalize(books_doc_vectors)
+    
+    print(f"Ajánlórendszer felépítve (Súlyozott). Időtartam: {time.time() - start_time:.2f} mp.")
+    
+    # Mentés
     print("Vektorok és adatok mentése a lemezre...")
+    os.makedirs('.cache', exist_ok=True) 
     np.save('.cache/netflix_vectors.npy', netflix_doc_vectors)
     np.save('.cache/books_vectors.npy', books_doc_vectors)
+
+    # Töröljük a felesleges segédoszlopokat mentés előtt
+    if 'genre_text' in netflix_df.columns:
+        netflix_df = netflix_df.drop(columns=['genre_text'])
+    if 'genre_text' in books_df.columns:
+        books_df = books_df.drop(columns=['genre_text'])
 
     netflix_df.to_parquet('.cache/netflix_df.parquet')
     books_df.to_parquet('.cache/books_df.parquet')

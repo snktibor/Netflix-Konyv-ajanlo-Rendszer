@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import numpy as np
 from recommender_logic import (
-    download_nltk_data,
     load_datasets,
     build_recommendation_models,
     recommend_books
@@ -28,7 +27,7 @@ def load_all_models():
     os.makedirs(GLOVE_DIR, exist_ok=True)
     os.makedirs(CACHE_DIR, exist_ok=True)
     
-    download_nltk_data() # NLTK letöltés (a Rendernek is kell)
+    #download_nltk_data() # NLTK letöltés (a Rendernek is kell)
 
     n_vec_path = os.path.join(CACHE_DIR, 'netflix_vectors.npy')
     b_vec_path = os.path.join(CACHE_DIR, 'books_vectors.npy')
