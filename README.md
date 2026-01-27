@@ -49,6 +49,17 @@ A projekt nyilvánosan elérhető, Kaggle-en közzétett adatkészleteket haszn�
 
 ---
 
+## 🌐 Online Demo
+
+Nem szeretnél telepíteni? Próbáld ki az alkalmazást közvetlenül a böngésződből az alábbi linken:
+
+👉 **[netflix-konyv-ajanlo-rendszer.streamlit.app](https://netflix-konyv-ajanlo-rendszer.streamlit.app/)**
+
+> ⚠️ **Fontos:** Az alkalmazás elindítása az ingyenes felhő infrastruktúrán **kb. 5-10 percet vehet igénybe**. Kérlek, légy türelemmel a betöltésnél!
+
+
+---
+
 ## 🚀 Telepítés és Futtatás
 
 ### Előfeltételek
